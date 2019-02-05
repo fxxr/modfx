@@ -1,0 +1,125 @@
+Company
+  Name
+  Details         (CompanyDetails)
+  BankAccounts    (CompanyBankAccount)
+    Account       (AccountDetails)
+  PrimaryAccount  (CompanyBankAccount)
+
+Customer
+  Name
+  ContactPerson
+  Details         (CompanyDetails)
+  AccountDetails  (_)
+  Installations   (Installation)
+    SystemNumber
+    Licenses      (License)
+  LicenseInfo
+    Type          (LicenseType)
+    State         (LicenseState)
+    Count
+    UserCount     (_)
+    Valid
+      From        (date)
+      Till        (date)
+    AgreementRequested  (boolean)
+
+BaseCustomer  (base Customer)
+  Name
+  LegalName      (Details.LegalName)
+  ContactPerson
+  Country        (Details.Country)
+  Inn            (Details.Inn)
+  Email          (Details.Email)
+  LicenseInfo
+
+License
+  Installation   (_)
+  State          (LicenseState)
+  License        (LicenseDetails)
+
+Agreement
+  Number   (15)
+  Date
+  License  (_)
+
+LicenseDetails ~
+  Type           (LicenseType)
+  UserCount      (_)
+  Valid
+    From         (date)
+    Till         (date)
+
+CompanyDetails ~
+  LegalName
+  Director
+  DirectorInGenitive
+  DirectorActing
+  AccountantInChief
+  Country    (_)
+  Inn        (15)
+  Okpo       (15)
+  RegNumber  (31)
+  Email
+  Phone
+  Address    (Address)
+
+AccountDetails ~
+  Bik
+  Bank
+    Name
+    City                      (_)
+  CorrespondentAccountNumber  (15)
+  AccountNumber               (15)
+
+Address ~
+  Zip      (6)
+  Country  (_)
+  City     (_)
+  Address
+
+Invoice
+  Number
+  Date
+  Customer         (_)
+  AccountDetails   (CompanyBankAccount)
+  Products         (InvoiceProduct)
+    Number         (byte)
+    Product        (_)
+    Quantity       (short)
+    Cost
+  Total            (money)
+  Currency         (_)
+
+Product
+  License  (LicenseDetails)
+  Price
+
+Country =
+  Russia
+  Ukraine
+  Belarus
+  Kazakhstan
+  Moldova
+
+City
+  Name
+  Country  (_)
+
+LicenseType =
+  Pro
+  Lite
+  Free
+
+UserCount =
+  Single
+  Multi
+  
+LicenseState =
+  Active
+  Expired
+  Revoked
+
+Currency =
+  RUB
+  USD
+  EUR
