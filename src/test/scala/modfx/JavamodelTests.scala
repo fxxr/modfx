@@ -16,34 +16,34 @@ object JavamodelTests extends TestSuite {
         "License",
         ModelFile,
         PackageDecl("licensing.model"), 
-        Seq(
+        List(
           ImportDecl("common.base.Guid", ProjectImport),
           ImportDecl("common.base.model.Entity", ProjectImport),
           ImportDecl("licensing.model.meta.LicenseMeta.LICENSE", StaticImport)
         ),
         ClassDecl(
-          "License", Seq(Public), 
+          "License", List(Public), 
           Some(Type("Entity.Plain", TypeParams("LicenseMeta", "LicenseMeta.Field", "LicenseMeta.Inner"))),
-          Seq.empty,
+          List.empty,
           Body(
-            FieldDecl(Type("LicenseState"), "state", Seq(Public, Final)),
-            FieldDecl(Type("LicenseDetails"), "license", Seq(Public, Final)),
-            ConstructorDecl("License", params = Seq(
+            FieldDecl(Type("LicenseState"), "state", List(Public, Final)),
+            FieldDecl(Type("LicenseDetails"), "license", List(Public, Final)),
+            ConstructorDecl("License", params = List(
                 Param(Type("int"), "id"),
                 Param(Type("Guid"), "guid"),
                 Param(Type("LicenseState"), "state"),
                 Param(Type("LicenseDetails"), "license")
-              ), statements = Seq(
+              ), statements = List(
                 Super(NameExpr("id"), NameExpr("guid")),
                 FieldAssign("this", "state", NameExpr("state")),
                 FieldAssign("this", "license", NameExpr("license"))
               )
             ),
-            MethodDecl(Type("LicenseMeta"), "meta", Seq(Public), overriding = true, Seq.empty, Block(
+            MethodDecl(Type("LicenseMeta"), "meta", List(Public), overriding = true, List.empty, Block(
               Return(NameExpr("LICENSE"))
             )),
-            MethodDecl(Type("Object"), "getValue", Seq(Public), overriding = true, Seq(Param(Type("LicenseMeta.Field"), "field")), Block(
-              Switch(NameExpr("field"), Seq(
+            MethodDecl(Type("Object"), "getValue", List(Public), overriding = true, List(Param(Type("LicenseMeta.Field"), "field")), Block(
+              Switch(NameExpr("field"), List(
                 Case("State", Return("state")),
                 Case("License", Return("license"))
               )),
@@ -90,12 +90,12 @@ object JavamodelTests extends TestSuite {
         "LicenseState",
         ModelFile,
         PackageDecl("licensing.model"),
-        Seq.empty,
-        EnumDecl("LicenseState", Seq.empty, EnumBody(Seq(
+        List.empty,
+        EnumDecl("LicenseState", List.empty, EnumBody(List(
           EnumEntry("Active"),
           EnumEntry("Expired"),
           EnumEntry("Revoked")
-        ), Seq.empty))
+        ), List.empty))
       )
       assert(JavaModelFormatter.toString(licenseState) ==
         """package licensing.model;

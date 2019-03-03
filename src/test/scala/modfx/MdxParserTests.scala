@@ -36,14 +36,14 @@ object MdxParserTests extends TestSuite {
           |    Cost      (money)
           |
           |
-          |ProductBase (base Product)
+          |ProductBase (Product)
           |  Code   (10)
           |  Title
           |  Price  (money)
         """.stripMargin)
       assert(objs.length == 2)
       assert(objs.head.toString == "TopNode(Order,None,ArrayBuffer(Leaf(Number,None), Leaf(Date,None), Leaf(Customer,Some(_)), NestedNode(Items,Some(OrderItem),ArrayBuffer(Leaf(Num,Some(short)), Leaf(Product,Some(_)), Leaf(Quantity,Some(short)), Leaf(Cost,Some(money))))))")
-      assert(objs.tail.head.toString == "TopNode(ProductBase,Some((base Product)),ArrayBuffer(Leaf(Code,Some(10)), Leaf(Title,None), Leaf(Price,Some(money))))")
+      assert(objs.tail.head.toString == "TopNode(ProductBase,Some(Product),ArrayBuffer(Leaf(Code,Some(10)), Leaf(Title,None), Leaf(Price,Some(money))))")
     }
   }
 }

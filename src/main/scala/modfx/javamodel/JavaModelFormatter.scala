@@ -6,9 +6,9 @@ package modfx.javamodel
 object JavaModelFormatter {
   def toString(node: Node): String = toStrings(node, inner = false).mkString("\n")
   
-  private def toStrings(node: Node): Seq[String] = toStrings(node, inner = true) 
+  private def toStrings(node: Node): List[String] = toStrings(node, inner = true) 
 
-  private def toStrings(node: Node, inner: Boolean): Seq[String] = node match {
+  private def toStrings(node: Node, inner: Boolean): List[String] = node match {
     case JavaFile(_, _, pack, imports, mainType) => toStrings(pack) ++ toImportStrings(imports) ++ toStrings(mainType)
     case PackageDecl(name) => s"package $name;" :: "" :: Nil
     case ed: EnumDecl => enumDecl(ed, inner)
@@ -17,7 +17,7 @@ object JavaModelFormatter {
     case cons: ConstructorDecl => constructorDecl(cons)
     case md: MethodDecl => methodDecl(md)
     case ConstructorCall(name, params) => prependHead(s"new $name", callParamsChopDown(params))
-    case Switch(expr, cases) => Seq(s"switch (${toStr(expr)}) {") ++ indent(cases map toStr) ++ Seq( "}")
+    case Switch(expr, cases) => List(s"switch (${toStr(expr)}) {") ++ indent(cases map toStr) ++ Seq( "}")
     case Return(expr) => returnExpr(expr)
     case Func(params, body) => func(params, body)
     case MethodCall(ctx, name, params) => methodCall(ctx, name, params)
@@ -37,6 +37,7 @@ object JavaModelFormatter {
     case Super(params) => s"super${callParams(params).mkString(", ")};"
     case FieldAssign(ctx, name, expr) => s"$ctx.$name = ${toStr(expr)};"
     case NameExpr(name) => name
+    case IntExpr(value) => value.toString
     case Case(name, statements) => s"case $name: " + statements.map(toStr).mkString(" ")
     case Return(expr) => expr match {
       case Some(e) => s"return ${toStr(e)};"
@@ -45,7 +46,7 @@ object JavaModelFormatter {
     case _ => s"?? $node ??"
   }
 
-  private def func(params: Params, body: Expression): Seq[String] = {
+  private def func(params: Params, body: Expression): List[String] = {
     val funcParams = params match {
       case Nil => "()"
       case singleParam :: Nil => singleParam.name
@@ -54,23 +55,23 @@ object JavaModelFormatter {
     prependHead(s"$funcParams -> ", toStrings(body)) 
   }
   
-  private[this] def prependHead(prefix: String, coll: Seq[String]): Seq[String] = coll match {
+  private[this] def prependHead(prefix: String, coll: List[String]): List[String] = coll match {
     case Nil => prefix :: Nil
     case head :: tail => (prefix + head) +: tail
   }
   
-  private def methodCall(ctx: String, name: Name, params: CallParams): Seq[String] = {
+  private def methodCall(ctx: String, name: Name, params: CallParams): List[String] = {
     val methodName = if (ctx.isEmpty) name else ctx + "." + name
     prependHead(methodName, callParamsChopDown(params))
   }
   
-  private def returnExpr(expr: Option[Expression]): Seq[String] = expr.map(toStrings).getOrElse(Nil) match {
+  private def returnExpr(expr: Option[Expression]): List[String] = expr.map(toStrings).getOrElse(Nil) match {
     case Nil => "return;" :: Nil
     case head :: Nil => s"return $head;" :: Nil
     case head :: tail => s"return $head" +: appendSemicolon(tail)
   }
   
-  private def appendSemicolon(strings: Seq[String]): Seq[String] = strings match {
+  private def appendSemicolon(strings: List[String]): List[String] = strings match {
     case Nil => Nil
     case single :: Nil => single + ";" :: Nil
     case _ =>
@@ -78,51 +79,51 @@ object JavaModelFormatter {
       ((reversed.head + ";") +: reversed.tail).reverse
   }
   
-  private def toImportStrings(imports: Seq[ImportDecl]): Seq[String] = imports match {
+  private def toImportStrings(imports: List[ImportDecl]): List[String] = imports match {
     case Nil => Nil
-    case _ => (imports map toStr) :+ ""
+    case _ => imports map toStr
   }
 
-  private def callParams(params: CallParams): Seq[String] = params.map(toStrings) match {
+  private def callParams(params: CallParams): List[String] = params.map(toStrings) match {
     case Nil => "()" :: Nil
     case fewParams if fewFlatParams(fewParams) => "(" + fewParams.map(_.head).mkString(", ") + ")" :: Nil
     case moreParams => "(" +: indent(moreParams.flatten) :+ ")"
   }
 
-  private def fewFlatParams(fewParams: Seq[Seq[String]]): Boolean = 
+  private def fewFlatParams(fewParams: List[List[String]]): Boolean = 
     fewParams.map(_.length).sum <= 3 && fewParams.forall(_.length == 1)
   
-  private def callParamsChopDown(params: CallParams): Seq[String] = params match {
+  private def callParamsChopDown(params: CallParams): List[String] = params match {
     case Nil => "()" :: Nil
-    case oneParam :: Nil => Seq("(" + toStr(oneParam) + ")")
+    case oneParam :: Nil => List("(" + toStr(oneParam) + ")")
     case _ => "(" +: chopDownParams(params) :+ ")"
   }
 
-  private def appendCommas(strings: Seq[Seq[String]]): Seq[String] = {
+  private def appendCommas(strings: List[List[String]]): List[String] = {
     strings.init.flatMap(i => i.init :+ i.last + ",") ++ strings.last
   }
 
-  private def chopDownParams(params: CallParams): Seq[String] = appendCommas(params.map(p => indent(toStrings(p))))
+  private def chopDownParams(params: CallParams): List[String] = appendCommas(params.map(p => indent(toStrings(p))))
 
-  private def enumDecl(enumDecl: EnumDecl, inner: Boolean): Seq[String] = {
+  private def enumDecl(enumDecl: EnumDecl, inner: Boolean): List[String] = {
     val implementsPart = join(" implements ", enumDecl.implemented)
     val res = (s"public enum ${enumDecl.name}$implementsPart {" :: Nil) ++ indent(enumBody(enumDecl.body)) :+ "}"
     if (inner) "" +: res else res
   }
 
-  private def classDecl(classDecl: ClassDecl): Seq[String] = {
+  private def classDecl(classDecl: ClassDecl): List[String] = {
     val impl = join(" implements ", classDecl.implemented)
-    val ext = classDecl.extended.map(tpe => " extends " + toStr(tpe)).getOrElse("???")
+    val ext = classDecl.extended.map(tpe => " extends " + toStr(tpe)).getOrElse("")
     val mod = classDecl.modifiers.map(modifier).mkString(" ")
-    (s"$mod class ${classDecl.name}$ext$impl {" :: Nil) ++ indent(body(classDecl.body)) :+ "}"
+    ("" :: s"$mod class ${classDecl.name}$ext$impl {" :: Nil) ++ indent(body(classDecl.body)) :+ "}"
   }
   
-  private def constructorDecl(cons: ConstructorDecl): Seq[String] = {
+  private def constructorDecl(cons: ConstructorDecl): List[String] = {
     val consLines = cons.statements map toStr
     ("" :: s"public ${cons.name}(${cons.params.map(toStr).mkString(", ")}) {" :: Nil ) ++ indent(consLines) :+ "}"
   }
 
-  private def methodDecl(methodDecl: MethodDecl): Seq[String] = {
+  private def methodDecl(methodDecl: MethodDecl): List[String] = {
     val mod = methodDecl.modifiers.map(modifier).mkString(" ")
     val tpe = toStr(methodDecl.tpe)
     val methodLines = methodDecl.body.statements.flatMap(toStrings)
@@ -131,7 +132,7 @@ object JavaModelFormatter {
     prefix ++ (s"$mod $tpe ${methodDecl.name}($params) {" :: Nil) ++ indent(methodLines) :+ "}"
   }
   
-  private def enumBody(enumBody: EnumBody): Seq[String] = {
+  private def enumBody(enumBody: EnumBody): List[String] = {
     val declarations = enumBody.enumDeclarations.flatMap(toStrings)
     val entries = declarations match {
       case Nil => enumBody.entries.init.map(_.name + ",") :+ s"${enumBody.entries.last.name}"
@@ -140,7 +141,7 @@ object JavaModelFormatter {
     entries ++ declarations
   }
 
-  private def body(body: Body): Seq[String] = body.declarations.flatMap(toStrings)
+  private def body(body: Body): List[String] = body.declarations.flatMap(toStrings)
 
   private def modifier(modifier: Modifier): String = modifier match {
     case Public => "public"
@@ -149,11 +150,11 @@ object JavaModelFormatter {
     case Final => "final"
   }
 
-  private def join[N <: Node](prefix: String, list: Seq[N], sep: String = ", "): String = list match {
+  private def join[N <: Node](prefix: String, list: List[N], sep: String = ", "): String = list match {
     case Nil => ""
-    case nel: Seq[N] => prefix + nel.map(toStr).mkString(", ")
+    case nel: List[N] => prefix + nel.map(toStr).mkString(", ")
   }
 
   private def indent(str: String): String = "    " + str
-  private def indent(strings: Seq[String]): Seq[String] = strings map indent
+  private def indent(strings: List[String]): List[String] = strings map indent
 }

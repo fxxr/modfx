@@ -15,7 +15,7 @@ class ModelCreator(val topNodes: Seq[Ast.TopNode], val module: String) {
     case object Entity extends ObjType
     case object Inner extends ObjType
     case object Sub extends ObjType
-    case object Base extends ObjType
+    case object EntityView extends ObjType
     case object Enum extends ObjType
   }
 
@@ -24,21 +24,14 @@ class ModelCreator(val topNodes: Seq[Ast.TopNode], val module: String) {
     def collectNodes(node: Ast.Nesting): Seq[(String, Ast.Nesting)] = 
       (node.nestingName -> node) +: node.nesting.filter(_.descriptor.isDefined).flatMap(collectNodes)
     val nodeMap: Map[String, Ast.Nesting] = topNodes.flatMap(collectNodes).toMap
-    topNodes.filter(isRootObject).map(n => createObj(n.name, n, new Context(objTypes, nodeMap, createObj)))
-  }
-
-  def isRootObject(node: Ast.TopNode): Boolean = {
-    val tpe = decodeObjType(node.descriptor)
-    tpe == ObjType.Entity || tpe == ObjType.Enum
+    topNodes.map(n => createObj(n.name, n, new Context(objTypes, nodeMap, createObj)))
   }
 
   def decodeObjType(objTypeDef: Option[String]): ObjType = objTypeDef match {
-    case Some("~") | Some("(inner)") => ObjType.Inner
-    case Some("=") | Some("(enum)") => ObjType.Enum
-    case Some("(entity)") => ObjType.Entity
-    case Some(str) if str.startsWith("(base ") => ObjType.Base
+    case Some("~") => ObjType.Inner
+    case Some("=") => ObjType.Enum
+    case Some(_) => ObjType.EntityView
     case None => ObjType.Entity
-    case Some(_) => ObjType.Sub
   }
 
   def getFieldType(f: Ast.Leaf): FieldType = f.descriptor match {
@@ -47,8 +40,9 @@ class ModelCreator(val topNodes: Seq[Ast.TopNode], val module: String) {
     case Some("int") => IntField
     case Some("boolean") => BooleanField
     case Some("date") => DateField
-    case Some("datetime") => DatetimeField
+    case Some("datetime") => DateTimeField
     case Some("string") => StringField
+    case Some("money") => MoneyField
     case Some(length) if length.forall(_.isDigit) => StringField
     case Some(_) => RefField
     case None => guessFieldType(f.name)
@@ -56,38 +50,64 @@ class ModelCreator(val topNodes: Seq[Ast.TopNode], val module: String) {
 
   def guessFieldType(fieldName: String): FieldType = fieldName match {
     case "Date" | "Dob" | "From" | "Till" => DateField
-    case "Datetime" | "Ctime" | "Mtime" => DatetimeField
+    case "Datetime" | "Ctime" | "Mtime" => DateTimeField
     case "Price" | "Cost" | "Amount" | "Total" => MoneyField
     case "Count" => IntField
     case _ => StringField
   }
+  
+  sealed trait DescriptorContent
+  case object EmptyDesc extends DescriptorContent
+  case object SizeDesc extends DescriptorContent
+  case object TypeDesc extends DescriptorContent
+  case class RefDesc(ref: Obj) extends DescriptorContent
+  case class InnerDesc(inner: InnerField) extends DescriptorContent
+  case class UnknownDesc(unresolved: String) extends DescriptorContent
+  
+  private def handleDescriptorContent(desc: Option[String], fieldName: String, context: Context): DescriptorContent = 
+    desc.map(d => if (d == "_") fieldName else d) match {
+    case None => EmptyDesc
+    case Some(num) if isInt(num) => SizeDesc
+    case Some(typeName) if MdxParser.BaseParsers.fieldTypes.contains(typeName) => TypeDesc
+    case Some(inner) if context.isInner(inner) => context.createInner(inner, fieldName)
+      .map(InnerDesc).getOrElse(UnknownDesc(s"$fieldName ($inner)"))
+    case Some(refName) =>
+      resolveRef(refName, context).map(RefDesc).getOrElse(UnknownDesc(s"$fieldName ($refName)"))
+    case Some(dsc) => UnknownDesc(s"$fieldName ($dsc)")
+  }
+
+  private def size(desc: Option[String]): Int = desc match {
+    case Some(num: String) if isInt(num) => num.toInt
+    case _ => 0
+  }
 
   def createFieldOrInner(leaf: Ast.Leaf, context: Context): Nested = {
     val fieldType = getFieldType(leaf)
-    val size = leaf.descriptor match {
-      case Some(num: String) if num.toList.forall(_.isDigit) => num.toInt
-      case None if fieldType == StringField => 255
-      case _ => 0
-    }
-    val ref: Option[String] = leaf.descriptor.map(value => if (value == "_") leaf.name else value)
-    val inner: Option[InnerField] = leaf.descriptor.filter(context.isInner).flatMap(context.createInner(_, leaf.name))
-    def field = ref match {
-      case Some(refName) =>
-        val refObj: Option[Obj] = context.createObj(refName, refName)
-        val refFieldType = refObj match {
-          case Some(_: Enum) => EnumField
-          case _ => fieldType
+    handleDescriptorContent(leaf.descriptor, leaf.name, context) match {
+      case SizeDesc | EmptyDesc | TypeDesc =>
+        Field(leaf.name, fieldType, size(leaf.descriptor), None)
+      case InnerDesc(innerField) => innerField
+      case RefDesc(ref) =>
+        val refFieldType = ref match {
+          case _: Enum => EnumField
+          case _ => RefField
         }
-        Field(leaf.name, refFieldType, 0, refObj)
-      case None => 
-        Field(leaf.name, fieldType, size, None)
+        Field(leaf.name, refFieldType, 0, Some(ref))
+      case UnknownDesc(unresolved) => Field(s"UNRESOLVED $unresolved", RefField, 0, None)
     }
-    inner.getOrElse(field)
+  }
+  
+  private def isInt(str: String): Boolean = str forall Character.isDigit
+  
+  private def resolveRef(refDesc: String, context: Context): Option[Obj] = refDesc.split('/').toList match {
+    case mod :: obj :: Nil => Some(Entity(obj, mod, List.empty))
+    case obj :: Nil => context.createObj(obj, obj)
+    case _ => None
   }
 
-  def createInner(node: Ast.Nesting, context: Context): InnerField = {
+  def createInner(node: Ast.Nesting, parent: Ast.Node, context: Context): InnerField = {
     val innerName = node.descriptor.filter(_ != "_").getOrElse(node.name)
-    InnerField(node.name, Inner(innerName, module, getNested(node, context)))
+    InnerField(node.name, Inner(innerName, module, getNested(node, context), container = Some(parent.name)))
   }
 
   def createSub(node: Ast.NestedNode, context: Context): SubField =  {
@@ -111,18 +131,19 @@ class ModelCreator(val topNodes: Seq[Ast.TopNode], val module: String) {
     decodeObjType(node.descriptor) match {
       case ObjType.Entity => Entity(name, module, getNested(node, context))
       case ObjType.Enum => Enum(name, module, node.nested.map(createEnumItem))
-      case ObjType.Inner => Inner(name, module, getNested(node, context))
+      case ObjType.Inner => Inner(name, module, getNested(node, context), None)
       case ObjType.Sub => Sub(node.nestingName, module, getNested(node, context))
+      case ObjType.EntityView => EntityView(name, module, node.descriptor.getOrElse("??"), getNested(node, context))
     }
   }
 
   private def getNested(node: Ast.Nesting, context: Context) = {
-    node.nested.map(n => createNested(n, context))
+    node.nested.map(n => createNested(n, node, context))
   }
 
-  def createNested(node: Ast.Node, context: Context): Nested = node match {
+  def createNested(node: Ast.Node, parent: Ast.Node, context: Context): Nested = node match {
     case f: Ast.Leaf => createFieldOrInner(f, context)
-    case i: Ast.NestedNode if i.descriptor.isEmpty => createInner(i, context)
+    case i: Ast.NestedNode if i.descriptor.isEmpty => createInner(i, parent, context)
     case s: Ast.NestedNode => createSub(s, context)
   }
   

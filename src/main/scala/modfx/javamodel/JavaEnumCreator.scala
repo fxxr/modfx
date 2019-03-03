@@ -6,12 +6,12 @@ import modfx.model._
   * Creates Java AST for enum
   * @param obj Mdx AST for enum
   */
-class JavaEnumCreator(obj: Obj) extends JavaModelCreator {
+class JavaEnumCreator(obj: Obj) extends JavaModelCreator(obj) {
 
-  def create: Seq[JavaFile] = {
-    val body = EnumBody(obj.nested.map{case EnumItem(itemName) => EnumEntry(itemName)}, Seq.empty)
-    val enumDecl = EnumDecl(obj.name, implemented = Seq.empty, body)
+  def create: List[JavaFile] = {
+    val body = EnumBody(obj.nested.map{case EnumItem(itemName) => EnumEntry(itemName)}, List.empty)
+    val enumDecl = EnumDecl(obj.name, implemented = List.empty, body)
     val pack = PackageDecl(obj.module + ".model")
-    Seq(JavaFile(obj.name, ModelFile, pack, imports = Seq.empty, enumDecl))
+    List(JavaFile(obj.name, ModelFile, pack, imports = List.empty, enumDecl))
   }
 }
